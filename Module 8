@@ -1,0 +1,72 @@
+pragma solidity 0.8.28;
+
+contract ExampleContract {
+    mapping(address => uint256) public balances;
+
+    function deposit() public payable {
+        balances[msg.sender] += msg.value;
+    }
+
+    function withdraw(uint256 amount) public {
+        require(balances[msg.sender] >= amount, "Insufficient balance");
+        payable(msg.sender).transfer(amount);
+        balances[msg.sender] -= amount;
+    }
+
+    function getBalance() public view returns (uint256) {
+        return balances[msg.sender];
+    }
+}
+
+Identified Vulnerabilities
+1. Reentrancy Vulnerability:
+
+The withdraw function first transfers Ether and then updates the user's balance. This order allows a malicious contract to call withdraw recursively before the user's balance is updated, potentially draining funds.
+2. Improper Access Control:
+
+There are no access restrictions on the withdraw function. Any address can call it, which is generally acceptable in this context but could be risky if the contract evolves.
+3. Integer Overflows/Underflows:
+
+Solidity 0.8.0 and later has built-in overflow and underflow protection, so the code is safe from this vulnerability in its current form.
+
+
+
+Proposed Solutions
+1. Reentrancy Guard:
+
+Implement a reentrancy guard to ensure that a function cannot be invoked while it is already executing.
+2. Access Control:
+
+Implement an onlyOwner modifier or similar mechanisms to control access to critical functions, particularly if the contract’s functionality expands.
+3. Safe Math Operations:
+
+Since Solidity 0.8.0 has built-in checks for arithmetic operations, the current implementation does not require changes for safe math.
+
+
+
+Modify the Smart Contract
+pragma solidity ^0.8.0;
+
+contract ExampleContract {
+    mapping(address => uint256) public balances;
+    bool private locked; // Reentrancy guard
+
+    modifier noReentrant() {
+        require(!locked, "No reentrant calls allowed");
+        locked = true;
+        _;
+        locked = false;
+    }
+
+    function deposit() public payable {
+        balances[msg.sender] += msg.value;
+    }
+
+    function withdraw(uint256 amount) public noReentrant {
+        require(balances[msg.sender] >= amount, "Insufficient balance");
+        balances[msg.sender] -= amount; // Update balance before transfer
+        payable(msg.sender).transfer(amount);
+    }
+
+    function getBalance() public view returns (uint256) {
+        return balances[msg.sender];
